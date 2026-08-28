@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#17223a" />
-  <title>燈火成章 / Words Aglow — Greybox v0.1</title>
+  <title>燈火成章 / Words Aglow — Level System v0.1</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -12,9 +12,9 @@
     <section class="game-column">
       <header class="game-header">
         <div>
-          <p class="eyebrow">WORDS AGLOW · GREYBOX v0.1</p>
+          <p class="eyebrow">WORDS AGLOW · LEVEL SYSTEM v0.1</p>
           <h1>燈火成章</h1>
-          <p class="subtitle">選位置、放天燈、用風修航跡。四個相鄰字能組成成語，就把它們燒掉。</p>
+          <p id="levelSubtitle" class="subtitle">同一套天燈控風核心，改由關卡資料決定盤面、字序與速度。</p>
         </div>
         <button id="resetButton" class="secondary-button" type="button">重新開始</button>
       </header>
@@ -30,7 +30,7 @@
 
       <div class="control-card">
         <div class="control-row">
-          <label for="maxWindInput">最大風力</label>
+          <label for="maxWindInput">最大風力（灰盒調參）</label>
           <span id="maxWindLabel">55%</span>
         </div>
         <input id="maxWindInput" type="range" min="25" max="100" value="55" />
@@ -43,6 +43,13 @@
     </section>
 
     <aside class="side-panel">
+      <section class="panel-card level-card">
+        <label class="panel-label" for="levelSelect">DEV 關卡</label>
+        <select id="levelSelect" class="level-select" aria-label="選擇測試關卡"></select>
+        <h2 id="levelTitle" class="level-title">—</h2>
+        <p id="levelIntent">—</p>
+      </section>
+
       <section class="panel-card">
         <p class="panel-label">目前天燈</p>
         <div id="currentCharacter" class="current-character">—</div>
@@ -55,27 +62,28 @@
       </section>
 
       <section class="panel-card stats-card">
-        <div><span>成語</span><strong id="clearCount">0 / 4</strong></div>
-        <div><span>放燈</span><strong id="shotCount">0 / 14</strong></div>
+        <div><span>成語</span><strong id="clearCount">0 / 1</strong></div>
+        <div><span>放燈</span><strong id="shotCount">0 / 4</strong></div>
       </section>
 
       <section class="panel-card">
-        <h2>灰盒成語池</h2>
-        <p>一馬當先、畫蛇添足、風和日麗、心花怒放、九牛一毛、山明水秀、四海為家、天長地久</p>
+        <h2>本關成語池</h2>
+        <p id="idiomPoolText">—</p>
       </section>
 
       <section class="panel-card">
-        <h2>目前測什麼</h2>
-        <p>字袋不是純隨機：會偏向盤面可能用得到的字，但混入其他成語字與干擾字；連續廢字時有隱性保底。</p>
+        <h2>設計意圖</h2>
+        <p id="designHintText">—</p>
       </section>
 
       <section class="panel-card status-card">
         <h2>狀態</h2>
-        <p id="statusText">點底部選位置，再放第一盞燈。</p>
+        <p id="statusText">載入關卡中……</p>
       </section>
     </aside>
   </main>
 
+  <script src="src/levels.js"></script>
   <script src="src/game.js"></script>
 </body>
 </html>
