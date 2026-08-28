@@ -1,6 +1,11 @@
 (() => {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
+  const levels = Array.isArray(window.WORDS_AGLOW_LEVELS) ? window.WORDS_AGLOW_LEVELS : [];
+
+  if (!canvas || !ctx || !levels.length) {
+    throw new Error('Words Aglow level data failed to load.');
+  }
 
   const ui = {
     left: document.getElementById('leftWindButton'),
@@ -20,35 +25,26 @@
     clears: document.getElementById('clearCount'),
     shots: document.getElementById('shotCount'),
     status: document.getElementById('statusText'),
+    levelSelect: document.getElementById('levelSelect'),
+    levelTitle: document.getElementById('levelTitle'),
+    levelIntent: document.getElementById('levelIntent'),
+    levelSubtitle: document.getElementById('levelSubtitle'),
+    idiomPool: document.getElementById('idiomPoolText'),
+    designHint: document.getElementById('designHintText'),
   };
 
   const W = canvas.width;
   const H = canvas.height;
   const SIDE = 24;
   const TOP = 28;
-  const FAIL_Y = 535;
   const LAUNCH_Y = 553;
   const LANTERN_W = 42;
   const LANTERN_H = 50;
   const CONTACT_DISTANCE = 48;
-  const MAX_SHOTS = 14;
-  const TARGET_CLEARS = 4;
 
-  const IDIOMS = [
-    '一馬當先',
-    '畫蛇添足',
-    '風和日麗',
-    '心花怒放',
-    '九牛一毛',
-    '山明水秀',
-    '四海為家',
-    '天長地久',
-  ];
-
-  const idiomLookup = new Map(IDIOMS.map((idiom) => [sortCharacters(idiom), idiom]));
-  const idiomCharacters = Array.from(IDIOMS.join(''));
-  const DECOYS = Array.from('春夏秋冬東西南北星雲江河金玉龍虎人月夜光雨雪石木火土');
-
+  let levelIndex = 0;
+  let currentLevel = levels[levelIndex];
+  let idiomLookup = new Map();
   let lanterns = [];
   let queue = [];
   let currentCharacter = '';
@@ -60,8 +56,6 @@
   let shots = 0;
   let clears = 0;
   let ended = false;
-  let nonHelpfulStreak = 0;
-  let recentCharacters = [];
   let effects = [];
   let message = '';
   let messageUntil = 0;
@@ -77,13 +71,22 @@
     return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
-  function randomItem(items) {
-    return items[Math.floor(Math.random() * items.length)];
+  function physics() {
+    return currentLevel.physics;
+  }
+
+  function rules() {
+    return currentLevel.rules;
+  }
+
+  function visualSwaySeed(id) {
+    return (id * 0.731) % (Math.PI * 2);
   }
 
   function addLantern(x, y, character, anchor = false) {
+    const id = nextId++;
     lanterns.push({
-      id: nextId++,
+      id,
       x,
       y,
       character,
@@ -91,143 +94,86 @@
       escaping: false,
       escapeVelocity: 0,
       alpha: 1,
-      swaySeed: Math.random() * Math.PI * 2,
+      swaySeed: visualSwaySeed(id),
     });
   }
 
   function seedBoard() {
     lanterns = [];
     nextId = 1;
-
-    ['天', '地', '山', '水', '月', '星', '雲'].forEach((character, index) => {
-      addLantern(70 + index * 52, 72, character, true);
+    currentLevel.layout.forEach((item) => {
+      addLantern(item.x, item.y, item.character, Boolean(item.anchor));
     });
-
-    addLantern(92, 123, '一');
-    addLantern(138, 151, '馬');
-    addLantern(184, 123, '當');
-
-    addLantern(276, 123, '畫');
-    addLantern(322, 151, '蛇');
-    addLantern(368, 123, '添');
-
-    addLantern(116, 224, '風');
-    addLantern(162, 252, '和');
-    addLantern(208, 224, '日');
-
-    addLantern(252, 224, '心');
-    addLantern(298, 252, '花');
-    addLantern(344, 224, '怒');
-
-    addLantern(184, 174, '江');
-    addLantern(230, 174, '海');
-    addLantern(276, 174, '金');
   }
 
-  function boardCharacterCounts() {
-    const counts = new Map();
-    lanterns.filter((lantern) => !lantern.escaping).forEach((lantern) => {
-      counts.set(lantern.character, (counts.get(lantern.character) || 0) + 1);
+  function buildIdiomLookup() {
+    idiomLookup = new Map(
+      currentLevel.idioms.map((idiom) => [sortCharacters(idiom), idiom]),
+    );
+  }
+
+  function populateLevelSelect() {
+    ui.levelSelect.replaceChildren();
+    levels.forEach((level, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = `Level ${level.number} · ${level.name}`;
+      ui.levelSelect.append(option);
     });
-    return counts;
+    ui.levelSelect.value = String(levelIndex);
   }
 
-  function helpfulCharacters() {
-    const board = boardCharacterCounts();
-    const candidates = [];
-
-    for (const idiom of IDIOMS) {
-      const required = new Map();
-      for (const character of Array.from(idiom)) {
-        required.set(character, (required.get(character) || 0) + 1);
-      }
-
-      let present = 0;
-      const missing = [];
-      for (const [character, requiredCount] of required) {
-        const availableCount = Math.min(requiredCount, board.get(character) || 0);
-        present += availableCount;
-        for (let i = availableCount; i < requiredCount; i += 1) {
-          missing.push(character);
-        }
-      }
-
-      if (present >= 3 && missing.length === 1) {
-        candidates.push(missing[0]);
-      } else if (present === 2 && missing.length) {
-        candidates.push(...missing);
-      }
-    }
-
-    return [...new Set(candidates)];
-  }
-
-  function drawCharacterFromBag() {
-    const helpful = helpfulCharacters();
-    const forceHelpful = nonHelpfulStreak >= 2 && helpful.length > 0;
-    const roll = Math.random();
-
-    let character;
-    if (forceHelpful || (helpful.length && roll < 0.6)) {
-      character = randomItem(helpful);
-    } else if (roll < 0.87) {
-      character = randomItem(idiomCharacters);
-    } else {
-      character = randomItem(DECOYS);
-    }
-
-    let duplicateGuard = 0;
-    while (recentCharacters.at(-1) === character && duplicateGuard < 8) {
-      character = helpful.length > 1 && Math.random() < 0.6
-        ? randomItem(helpful)
-        : (Math.random() < 0.72 ? randomItem(idiomCharacters) : randomItem(DECOYS));
-      duplicateGuard += 1;
-    }
-
-    if (helpful.includes(character)) {
-      nonHelpfulStreak = 0;
-    } else {
-      nonHelpfulStreak += 1;
-    }
-
-    recentCharacters.push(character);
-    if (recentCharacters.length > 5) recentCharacters.shift();
-    return character;
-  }
-
-  function refillQueue() {
-    while (queue.length < 7) queue.push(drawCharacterFromBag());
+  function updateLevelMeta() {
+    ui.levelSelect.value = String(levelIndex);
+    ui.levelTitle.textContent = currentLevel.title;
+    ui.levelIntent.textContent = currentLevel.intent;
+    ui.levelSubtitle.textContent = currentLevel.intent;
+    ui.idiomPool.textContent = currentLevel.idioms.join('、');
+    ui.designHint.textContent = currentLevel.hint;
   }
 
   function advanceCharacter() {
-    refillQueue();
-    currentCharacter = queue.shift();
-    refillQueue();
+    currentCharacter = queue.shift() || '';
     updateHud();
   }
 
   function resetGame() {
     cancelAnimationFrame(frameId);
+    currentLevel = levels[levelIndex];
+    buildIdiomLookup();
     seedBoard();
-    queue = [];
+    queue = currentLevel.queue.slice();
     currentCharacter = '';
     activeLantern = null;
-    launchX = W / 2;
+    launchX = currentLevel.launch?.defaultX ?? W / 2;
     leftHeld = false;
     rightHeld = false;
     windState = 0;
     shots = 0;
     clears = 0;
     ended = false;
-    nonHelpfulStreak = 0;
-    recentCharacters = [];
     effects = [];
     message = '';
-    refillQueue();
+    messageUntil = 0;
+    previousTime = 0;
+
+    ui.maxWind.value = String(Math.round(physics().maxWind * 100));
+    ui.maxWindLabel.textContent = `${ui.maxWind.value}%`;
+
+    setWindHeld('left', false);
+    setWindHeld('right', false);
+    updateLevelMeta();
     advanceCharacter();
-    setStatus('點底部選位置，再按 Space 放第一盞燈。');
+    setStatus(currentLevel.hint);
     updateWindHud();
     draw();
+  }
+
+  function switchLevel(nextIndex) {
+    const parsed = Number(nextIndex);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed >= levels.length) return;
+    levelIndex = parsed;
+    resetGame();
   }
 
   function updateHud() {
@@ -235,8 +181,8 @@
     ui.next.forEach((element, index) => {
       element.textContent = queue[index] || '';
     });
-    ui.clears.textContent = `${clears} / ${TARGET_CLEARS}`;
-    ui.shots.textContent = `${shots} / ${MAX_SHOTS}`;
+    ui.clears.textContent = `${clears} / ${rules().targetClears}`;
+    ui.shots.textContent = `${shots} / ${rules().maxShots}`;
     ui.launch.disabled = Boolean(activeLantern) || ended || !currentCharacter;
   }
 
@@ -308,20 +254,21 @@
     ctx.fillStyle = 'rgba(13,23,33,.80)';
     ctx.fill();
 
+    const failY = rules().failY;
     ctx.save();
     ctx.setLineDash([7, 7]);
     ctx.strokeStyle = 'rgba(255,105,105,.42)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(12, FAIL_Y);
-    ctx.lineTo(W - 12, FAIL_Y);
+    ctx.moveTo(12, failY);
+    ctx.lineTo(W - 12, failY);
     ctx.stroke();
     ctx.restore();
 
     ctx.fillStyle = 'rgba(255,195,195,.8)';
     ctx.font = '12px system-ui';
     ctx.textAlign = 'left';
-    ctx.fillText('失敗線', 14, FAIL_Y - 8);
+    ctx.fillText('失敗線', 14, failY - 8);
 
     ctx.fillStyle = 'rgba(255,255,255,.08)';
     roundedRect(SIDE, 586, W - SIDE * 2, 55, 15);
@@ -348,7 +295,7 @@
     const y = lantern.y;
 
     ctx.save();
-    ctx.globalAlpha = lantern.alpha;
+    ctx.globalAlpha = lantern.alpha ?? 1;
     ctx.shadowColor = 'rgba(255,170,65,.45)';
     ctx.shadowBlur = active ? 18 : 10;
 
@@ -424,14 +371,15 @@
 
   function drawEndOverlay() {
     if (!ended) return;
+    const won = clears >= rules().targetClears;
     ctx.fillStyle = 'rgba(7,14,27,.60)';
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
     ctx.font = '800 30px system-ui, "Noto Sans TC", sans-serif';
-    ctx.fillText(clears >= TARGET_CLEARS ? '灰盒過關！' : '本局結束', W / 2, 300);
+    ctx.fillText(won ? `Level ${currentLevel.number} 過關！` : '本局結束', W / 2, 300);
     ctx.font = '16px system-ui, "Noto Sans TC", sans-serif';
-    ctx.fillText(clears >= TARGET_CLEARS ? '天燈控風核心 loop 跑完了。' : '碰到失敗線或天燈用完。', W / 2, 336);
+    ctx.fillText(won ? currentLevel.name : '碰到失敗線、字用完，或超過放燈上限。', W / 2, 336);
   }
 
   function draw() {
@@ -448,7 +396,13 @@
       ctx.closePath();
       ctx.fillStyle = 'rgba(255,235,180,.9)';
       ctx.fill();
-      drawLantern({ x: launchX, y: 560, character: currentCharacter, swaySeed: 0, alpha: 0.75 }, true);
+      drawLantern({
+        x: launchX,
+        y: 560,
+        character: currentCharacter,
+        swaySeed: 0,
+        alpha: 0.75,
+      }, true);
     }
 
     drawEffects();
@@ -485,21 +439,22 @@
   function launchLantern() {
     if (activeLantern || ended || !currentCharacter) return;
 
+    const id = nextId++;
     activeLantern = {
-      id: nextId++,
+      id,
       x: launchX,
       y: LAUNCH_Y,
       character: currentCharacter,
       vx: 0,
-      vy: -1.05,
-      swaySeed: Math.random() * Math.PI * 2,
+      vy: -physics().riseSpeed,
+      swaySeed: visualSwaySeed(id),
       contactTime: 0,
       alpha: 1,
     };
 
     shots += 1;
     advanceCharacter();
-    setStatus('A / D 控風。接近燈群會自然放慢，記得提早反吹煞車。');
+    setStatus('A / D 控風；越接近燈群，上升會越慢。提早反吹比最後一秒硬拉有效。');
     previousTime = performance.now();
     frameId = requestAnimationFrame(step);
   }
@@ -508,6 +463,7 @@
     if (!activeLantern) return Infinity;
     let nearest = Infinity;
     for (const lantern of lanterns) {
+      if (lantern.escaping) continue;
       nearest = Math.min(nearest, distance(activeLantern, lantern));
     }
     return nearest;
@@ -520,21 +476,30 @@
     updateEffects(dt);
     updateEscapingLanterns(dt);
 
+    const config = physics();
     const targetWind = (rightHeld ? 1 : 0) - (leftHeld ? 1 : 0);
-    const rampRate = targetWind === 0 ? 0.065 : 0.045;
+    const rampRate = targetWind === 0 ? config.windRampDown : config.windRampUp;
     windState += (targetWind - windState) * rampRate * dt;
     if (Math.abs(windState) < 0.008) windState = 0;
     updateWindHud();
 
     if (activeLantern) {
       const maxWind = Number(ui.maxWind.value) / 100;
-      activeLantern.vx += windState * 0.052 * maxWind * dt;
-      activeLantern.vx *= Math.pow(0.99, dt);
-      activeLantern.vx = Math.max(-2.25, Math.min(2.25, activeLantern.vx));
+      activeLantern.vx += windState * config.windAcceleration * maxWind * dt;
+      activeLantern.vx *= Math.pow(config.horizontalDrag, dt);
+      activeLantern.vx = Math.max(
+        -config.maxHorizontalSpeed,
+        Math.min(config.maxHorizontalSpeed, activeLantern.vx),
+      );
 
       const nearest = nearestLanternDistance();
-      const desiredRiseSpeed = nearest < 105 ? -0.58 : nearest < 155 ? -0.78 : -1.05;
-      activeLantern.vy += (desiredRiseSpeed - activeLantern.vy) * 0.045 * dt;
+      let desiredRiseSpeed = -config.riseSpeed;
+      if (nearest < config.nearSlowdownDistance) {
+        desiredRiseSpeed = -config.nearRiseSpeed;
+      } else if (nearest < config.midSlowdownDistance) {
+        desiredRiseSpeed = -config.midRiseSpeed;
+      }
+      activeLantern.vy += (desiredRiseSpeed - activeLantern.vy) * config.riseResponse * dt;
 
       activeLantern.x += activeLantern.vx * dt;
       activeLantern.y += activeLantern.vy * dt;
@@ -550,6 +515,7 @@
 
       let contacts = 0;
       for (const lantern of lanterns) {
+        if (lantern.escaping) continue;
         let dx = activeLantern.x - lantern.x;
         let dy = activeLantern.y - lantern.y;
         let d = Math.hypot(dx, dy);
@@ -593,7 +559,12 @@
     checkEndConditions();
     draw();
 
-    if (!ended && (activeLantern || lanterns.some((lantern) => lantern.escaping) || effects.length || Math.abs(windState) > 0.01)) {
+    if (!ended && (
+      activeLantern
+      || lanterns.some((lantern) => lantern.escaping)
+      || effects.length
+      || Math.abs(windState) > 0.01
+    )) {
       frameId = requestAnimationFrame(step);
     }
   }
@@ -620,11 +591,9 @@
     if (match) {
       burnMatch(match);
     } else {
-      setStatus(`「${placed.character}」纏住了。下一盞是「${currentCharacter}」。`);
+      setStatus(`「${placed.character}」纏住了。下一盞是「${currentCharacter || '—'}」。`);
     }
 
-    queue = [];
-    refillQueue();
     updateHud();
   }
 
@@ -677,7 +646,8 @@
         for (let k = j + 1; k < others.length; k += 1) {
           const combo = [start, others[i], others[j], others[k]];
           if (!comboConnected(combo)) continue;
-          const idiom = idiomLookup.get(sortCharacters(combo.map((lantern) => lantern.character).join('')));
+          const key = sortCharacters(combo.map((lantern) => lantern.character).join(''));
+          const idiom = idiomLookup.get(key);
           if (idiom) return { idiom, lanterns: combo };
         }
       }
@@ -708,8 +678,6 @@
 
     lanterns = lanterns.filter((lantern) => !burnedIds.has(lantern.id));
     releaseDisconnectedLanterns();
-    queue = [];
-    refillQueue();
     updateHud();
   }
 
@@ -732,7 +700,7 @@
     for (const lantern of live) {
       if (!seen.has(lantern.id)) {
         lantern.escaping = true;
-        lantern.escapeVelocity = -0.85 - Math.random() * 0.5;
+        lantern.escapeVelocity = -1.0;
       }
     }
   }
@@ -758,19 +726,25 @@
 
   function checkEndConditions() {
     if (ended) return;
-    if (clears >= TARGET_CLEARS) {
+    if (clears >= rules().targetClears) {
       ended = true;
       activeLantern = null;
       updateHud();
       return;
     }
-    if (shots >= MAX_SHOTS && !activeLantern) {
+    if (shots >= rules().maxShots && !activeLantern) {
       ended = true;
       updateHud();
       return;
     }
+    if (!currentCharacter && !activeLantern && clears < rules().targetClears) {
+      ended = true;
+      setStatus('本關字序已用完。');
+      updateHud();
+      return;
+    }
     for (const lantern of lanterns) {
-      if (!lantern.escaping && lantern.y + LANTERN_H / 2 >= FAIL_Y) {
+      if (!lantern.escaping && lantern.y + LANTERN_H / 2 >= rules().failY) {
         ended = true;
         activeLantern = null;
         setStatus('燈群碰到失敗線。');
@@ -839,9 +813,11 @@
   canvas.addEventListener('pointerdown', chooseLaunchPosition);
   ui.launch.addEventListener('click', launchLantern);
   ui.reset.addEventListener('click', resetGame);
+  ui.levelSelect.addEventListener('change', (event) => switchLevel(event.target.value));
   ui.maxWind.addEventListener('input', () => {
     ui.maxWindLabel.textContent = `${ui.maxWind.value}%`;
   });
 
+  populateLevelSelect();
   resetGame();
 })();
