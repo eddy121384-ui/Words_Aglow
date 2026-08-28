@@ -10,6 +10,21 @@ Pre-production / playable greybox.
 
 The core interaction has been tested in greybox form and is now moving into a real repository so it can be versioned, tested, polished, and actually finished.
 
+## Quick play
+
+On Windows, double-click `play.bat`.
+
+Or open `index.html` directly in a browser.
+
+Desktop controls:
+
+- **A** — wind left
+- **D** — wind right
+- **Space** — release lantern
+- Mouse / pointer — choose launch position
+
+Touch controls retain left/right wind buttons and a release button.
+
 ## Core loop
 
 1. Choose a launch position along the bottom of the playfield.
@@ -20,15 +35,6 @@ The core interaction has been tested in greybox form and is now moving into a re
 6. If four connected lanterns can form a valid four-character idiom, they ignite and disappear.
 7. Lanterns that lose their connection to the anchored cluster are released and float away.
 8. If the cluster grows down to the fail line, the run ends.
-
-Desktop controls:
-
-- **A** — wind left
-- **D** — wind right
-- **Space** — release lantern
-- Mouse / pointer — choose launch position
-
-Touch controls retain left/right wind buttons and a release button.
 
 ## Design principles
 
