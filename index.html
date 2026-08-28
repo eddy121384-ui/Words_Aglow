@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#17223a" />
+  <title>燈火成章 / Words Aglow — Greybox v0.1</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="game-column">
+      <header class="game-header">
+        <div>
+          <p class="eyebrow">WORDS AGLOW · GREYBOX v0.1</p>
+          <h1>燈火成章</h1>
+          <p class="subtitle">選位置、放天燈、用風修航跡。四個相鄰字能組成成語，就把它們燒掉。</p>
+        </div>
+        <button id="resetButton" class="secondary-button" type="button">重新開始</button>
+      </header>
+
+      <div class="canvas-frame">
+        <canvas id="gameCanvas" width="460" height="680" aria-label="燈火成章遊戲盤面"></canvas>
+      </div>
+
+      <div class="wind-controls" aria-label="風向控制">
+        <button id="leftWindButton" class="wind-button" type="button"><kbd>A</kbd><span>← 左風</span></button>
+        <button id="rightWindButton" class="wind-button" type="button"><span>右風 →</span><kbd>D</kbd></button>
+      </div>
+
+      <div class="control-card">
+        <div class="control-row">
+          <label for="maxWindInput">最大風力</label>
+          <span id="maxWindLabel">55%</span>
+        </div>
+        <input id="maxWindInput" type="range" min="25" max="100" value="55" />
+        <div class="wind-meter"><div id="windMeterFill" class="wind-meter-fill"></div></div>
+        <div id="windMeterText" class="meter-caption">風勢 0%</div>
+      </div>
+
+      <button id="launchButton" class="primary-button" type="button"><kbd>Space</kbd><span>放燈</span></button>
+      <p class="keyboard-hint">桌機：滑鼠選起飛位置 · Space 放燈 · A / D 控風</p>
+    </section>
+
+    <aside class="side-panel">
+      <section class="panel-card">
+        <p class="panel-label">目前天燈</p>
+        <div id="currentCharacter" class="current-character">—</div>
+        <p class="panel-label next-label">接下來</p>
+        <div class="next-row">
+          <span id="nextCharacter1" class="next-character"></span>
+          <span id="nextCharacter2" class="next-character"></span>
+          <span id="nextCharacter3" class="next-character"></span>
+        </div>
+      </section>
+
+      <section class="panel-card stats-card">
+        <div><span>成語</span><strong id="clearCount">0 / 4</strong></div>
+        <div><span>放燈</span><strong id="shotCount">0 / 14</strong></div>
+      </section>
+
+      <section class="panel-card">
+        <h2>灰盒成語池</h2>
+        <p>一馬當先、畫蛇添足、風和日麗、心花怒放、九牛一毛、山明水秀、四海為家、天長地久</p>
+      </section>
+
+      <section class="panel-card">
+        <h2>目前測什麼</h2>
+        <p>字袋不是純隨機：會偏向盤面可能用得到的字，但混入其他成語字與干擾字；連續廢字時有隱性保底。</p>
+      </section>
+
+      <section class="panel-card status-card">
+        <h2>狀態</h2>
+        <p id="statusText">點底部選位置，再放第一盞燈。</p>
+      </section>
+    </aside>
+  </main>
+
+  <script src="src/game.js"></script>
+</body>
+</html>
